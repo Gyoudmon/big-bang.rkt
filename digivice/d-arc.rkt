@@ -92,15 +92,15 @@ exec racket -N "`basename $0 .rkt`" -t "$0" -- ${1+"$@"}
       #true)
 
     (define/private (locate-widget) : Void
-      (define full-height (send this get-height))
-      (define-values (_ this-height) (send this get-client-size))
-      
-      (unless (eq? (send widget get-height) this-height)
-        (send widget resize (send widget get-width) this-height))
-      
-      (send widget move
-            (send this get-x)
-            (+ (send this get-y) (- full-height this-height))))))
+      (let-values ([(_ this-height) (send this get-client-size)])
+        (unless (eq? (send widget get-height) this-height)
+          (send widget resize (send widget get-width) this-height)))
+
+      (let-values ([(x y) (send this client->screen 0 0)]
+                   [(x-inset y-inset) (get-display-left-top-inset)])
+        (send widget move
+              (- x (or x-inset 0))
+              (- y (or y-inset 0)))))))
 
 
 
