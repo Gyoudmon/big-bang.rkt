@@ -8,6 +8,8 @@ exec racket -N "`basename $0 .rkt`" -t "$0" -- ${1+"$@"}
 
 #lang typed/racket/gui
 
+(require digimon/gui)
+
 (require digimon/system)
 (require digimon/tongue)
 (require digimon/location)
@@ -15,8 +17,10 @@ exec racket -N "`basename $0 .rkt`" -t "$0" -- ${1+"$@"}
 (require bitmap/base)
 (require bitmap/constructor)
 
+(require "d-arc/digicore.rkt")
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-(current-digimon "Nefertimon")
+(current-digimon "STEM")
 (current-digivice (symbol->string (#%module)))
 
 (current-tongue 'zh)
@@ -26,17 +30,20 @@ exec racket -N "`basename $0 .rkt`" -t "$0" -- ${1+"$@"}
 (define toolbar-background-color : Color (rgb* 'white))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-(define-type Editor-Frame%
+(define-type GameFrame%
   (Class #:implements Frame%
          (init [label String #:optional] [parent (Option (Instance Frame%)) #:optional]
                [x (Option Positive-Integer) #:optional] [y (Option Positive-Integer) #:optional]
                [width (Option Positive-Integer) #:optional] [height (Option Positive-Integer) #:optional]
                [float? Boolean #:optional])
          (init-field [inset Byte #:optional])
-         (field [#%editor (Instance Pasteboard%)]
-                [#%canvas (Instance Editor-Canvas%)])))
+         (field [#%editor (Instance Game-Zone%)]
+                [#%canvas (Instance Editor-Canvas%)])
 
-(define editor-frame% : Editor-Frame%
+         [on-elapse (-> Nonnegative-Fixnum Nonnegative-Fixnum Void)]
+         [on-elapsed (-> Nonnegative-Fixnum Nonnegative-Fixnum Fixnum Void)]))
+
+(define game-frame% : GameFrame%
   (class frame%
     (init [label ""] [parent #false]
           [x #false] [y #false] [width #false] [height #false]
@@ -49,13 +56,19 @@ exec racket -N "`basename $0 .rkt`" -t "$0" -- ${1+"$@"}
                [min-width width] [min-height height] [stretchable-width #true] [stretchable-height #true]
                [border 0] [spacing 0] [enabled #true] [alignment '(center top)])
 
-    (field [#%editor (new pasteboard%)]
+    (field [#%editor (new game-zone%)]
            [#%canvas (instantiate editor-canvas% (this #%editor '(no-border no-hscroll no-vscroll))
-                       [wheel-step #false] [vertical-inset inset] [horizontal-inset inset])])))
+                       [wheel-step #false] [vertical-inset inset] [horizontal-inset inset])])
+
+    (define/public (on-elapse interval uptime)
+      (send #%editor on-elapse interval uptime))
+
+    (define/public (on-elapsed interval uptime elapsed)
+      (send #%editor on-elapsed interval uptime elapsed))))
 
 (define split-frame%
-  (class editor-frame% (super-new)
-    (define widget : (Instance Editor-Frame%) (new editor-frame% [width 320] [float? #true]))
+  (class game-frame% (super-new)
+    (define widget : (Instance GameFrame%) (new game-frame% [width 320] [float? #true]))
     
     (define/override (on-superwindow-show show?)
       (if (not show?) (on-hide) (on-show)))
@@ -77,10 +90,12 @@ exec racket -N "`basename $0 .rkt`" -t "$0" -- ${1+"$@"}
         (locate-widget)))
 
     (define/private (on-show) : Void
-      (send this maximize #true))
+      (send this maximize #true)
+      (send timeline start 0))
 
     (define/private (on-hide) : Void
-      (send widget show #false))
+      (send widget show #false)
+      (send timeline stop))
 
     (define/private (show-widget) : True
       (send widget show #true)
@@ -100,11 +115,22 @@ exec racket -N "`basename $0 .rkt`" -t "$0" -- ${1+"$@"}
                    [(x-inset y-inset) (get-display-left-top-inset)])
         (send widget move
               (- x (or x-inset 0))
-              (- y (or y-inset 0)))))))
+              (- y (or y-inset 0)))))
+
+    (define (on-elapse [interval : Nonnegative-Fixnum] [uptime : Nonnegative-Fixnum]) : Void
+      (send this on-elapse interval uptime)
+      (send widget on-elapse interval uptime))
+
+    (define (on-elapsed [interval : Nonnegative-Fixnum] [uptime : Nonnegative-Fixnum] [elapsed : Fixnum]) : Void
+      (send this on-elapsed interval uptime elapsed)
+      (send widget on-elapsed interval uptime elapsed))
+
+    (define timeline : (Instance GameTimer%) (new game-timer% [on-elapse on-elapse] [on-elapsed on-elapsed]))))
 
 
 
 (module+ main
   (parameterize ([current-directory (digimon-path 'digivice)]
                  [current-command-line-arguments (vector)])
-    (send (new split-frame% [label "STEM"]) show #true)))
+    (let ([d-arc (new split-frame% [label (current-digimon)])])
+      (send d-arc show #true))))
