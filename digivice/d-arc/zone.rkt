@@ -4,53 +4,74 @@
 
 (require racket/flonum)
 
-(require digimon/exception)
-(require digimon/dtrace)
+(require "sprite.rkt")
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-(define-type Digivice-Operation (U 'select 'deselect 'hover 'active 'deactive 'goodbye))
-(define-type Digivice-Event (U Integer (Instance Event%)))
-(define-type On-Interactive-Operation (-> (Instance Game-Zone%) (Instance Snip%) Digivice-Operation Digivice-Event Any))
+(define-type IGraphletInfo<%>
+  (Class (init-field [master (Instance Game-Zone%)])))
 
-(define-type Game-Snip%
-  (Class #:implements Snip%
-         [enable (-> Boolean Void)]
-         [enabled? (-> Boolean)]
-         #;[selected? (-> Boolean)]
-         [refresh-now (-> Void)]
-         [get-zone-size (-> (Values Nonnegative-Flonum Nonnegative-Flonum))]
-         [get-size (-> (Values Nonnegative-Flonum Nonnegative-Flonum))]
-         [get-tooltip (-> (Instance DC<%>) Real Real Real Real (Instance Mouse-Event%) Any)]
-         [on-insert (-> (Instance Game-Zone%) Void)]
-         [on-delete (-> (Instance Game-Zone%) Void)]
-         [on-select (-> Boolean Digivice-Event Boolean)]
-         [on-hover (-> Boolean Digivice-Event Boolean)]
-         [on-active (-> Boolean Digivice-Event Boolean)]
+(define-type Graphlet%
+  (Class #:implements Sprite%
+         [master (-> Game-Zone%)]
+         [bind-info (-> (Instance IGraphletInfo<%>) Void)]
+         
+         [colliding-with-mouse? (-> Flonum Flonum Boolean)]
+         [own-caret (-> Boolean Void)]
+         [has-caret? (-> Boolean)]
+         [moor (->* () (Symbol) Void)]
 
-         [on-elapse (-> Nonnegative-Fixnum Nonnegative-Fixnum Void)]
-         [on-elapsed (-> Nonnegative-Fixnum Nonnegative-Fixnum Fixnum Void)]))
+         [available-visible-region (-> Flonum Flonum (Values Nonnegative-Flonum Nonnegative-Flonum))]
+         [get-location (->* () (Symbol) (Values Flonum Flonum))]
+         [contain-region? (-> Flonum Flonum Flonum Flonum Boolean)]
+
+         [notify-ready (-> Void)]
+         [notify-updated (-> Void)]))
 
 (define-type Game-Zone%
-  (Class #:implements Pasteboard%
-         #;[enable (-> Boolean Void)]
+  (Class [construct (-> Void)]
+         [get-extent (-> Flonum Flonum (Values Nonnegative-Flonum Nonnegative-Flonum))]
+         [get-margin (-> Flonum Flonum (Values Flonum Flonum Flonum Flonum))]
+         [resize (-> Nonnegative-Flonum Nonnegative-Flonum Void)]
+         [update (-> Nonnegative-Fixnum Nonnegative-Fixnum Nonnegative-Fixnum Void)]
+         [draw (-> (Instance DC<%>) Flonum Flonum Nonnegative-Flonum Nonnegative-Flonum Void)]
+         [draw-progress (-> (Instance DC<%>) Flonum Flonum Nonnegative-Flonum Nonnegative-Flonum Void)]
+         [ready? (-> Boolean)]
+
+         [on-key (-> (U Char Symbol) Boolean)]
+         [on-tap (-> Flonum Flonum Void)]
+         [on-leave (-> Flonum Flonum Void)]
+         [on-wheel-translation (-> Flonum Flonum Flonum Boolean Boolean)]
+         [on-wheel-zoom (-> Flonum Flonum Flonum Boolean)]
+
+         [on-char (-> (U Char Symbol) (Instance Key-Event%) Boolean)]
+         [on-mouse-move (-> Flonum Flonum (Instance Mouse-Event%) Boolean)]
+         [on-mouse-drag (-> Flonum Flonum Symbol (Instance Mouse-Event%) Boolean)]
+         [on-mouse-press (-> Flonum Flonum Symbol (Instance Mouse-Event%) Boolean)]
+         [on-mouse-release (-> Flonum Flonum Symbol (Instance Mouse-Event%) Boolean)]
+
+         [enable (-> Boolean Void)]
          [get-zone-view (-> (Values Flonum Flonum Nonnegative-Flonum Nonnegative-Flonum))]
          [find-last-snip (-> (Option (Instance Snip%)))]
          [get-snip-rectangle (-> (Instance Snip%) [#:global? Boolean] (Values Flonum Flonum Nonnegative-Flonum Nonnegative-Flonum))]
          [get-zone-rectangle (-> [#:global? Boolean] (Values Flonum Flonum Nonnegative-Flonum Nonnegative-Flonum))]
-         [do-interactive-operation (-> (Instance Snip%) Digivice-Operation Digivice-Event Boolean)]
-         [ordered-insert (->* ((-> (Instance Snip%) (Instance Snip%) Any) (Instance Snip%)) (Real Real #:unique? Boolean) Void)]
-         #;[find-next-editor-snip (-> (Option Snip) (Option (Instance Nefertimon-Editor-Snip%)))]
-         #;[find-previous-editor-snip (-> (Option Snip) (Option (Instance Nefertimon-Editor-Snip%)))]
-         #;[find-first-editor-snip (-> (Option (Instance Nefertimon-Editor-Snip%)))]
-         #;[find-last-editor-snip (-> (Option (Instance Nefertimon-Editor-Snip%)))]
-
+         
          [on-elapse (-> Nonnegative-Fixnum Nonnegative-Fixnum Void)]
          [on-elapsed (-> Nonnegative-Fixnum Nonnegative-Fixnum Fixnum Void)]))
+
+#;(define-type Digivice-Zone%
+  (Class #:implements Game-Zone%
+         (init-field [alignment (U 'vertical 'horizontal)]
+                     [gapsize Nonnegative-Real #:optional]
+                     [on-interactive-operation On-Interactive-Operation #:optional])))
+
+#;(define-type Heads-up-Zone%
+  (Class #:implements Game-Zone%
+         [get-margin (-> (Boxof Nonnegative-Real) (Boxof Nonnegative-Real) (Boxof Nonnegative-Real) (Boxof Nonnegative-Real) Void)]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (define the-dc (make-object bitmap-dc% #false))
 
-(define game-snip% : Game-Snip%
+#;(define sprite% : Sprite%
   (class snip% (super-new)
     (send* this
       (set-snipclass (new snip-class%))
@@ -73,11 +94,11 @@
     (define/public (on-elapsed interval uptime elapsed) (void))
 
     
-    #;(define/public (selected?)
+    (define/public (selected?)
       (define master : (Option (Instance Snip-Admin%)) (get-admin))
       (and master
            (let ([zone (send master get-editor)])
-             (and (pasteboard%? zone)
+             (and (typeof? zone pasteboard%)
                   (send zone is-selected? this)))))
 
     (define/public (refresh-now)
@@ -124,7 +145,25 @@
     (define/override (write /dev/edtout)
       (throw exn:fail:unsupported "this feature has not been implemented yet!"))))
 
-(define game-zone% : Game-Zone%
+#;(define editable-sprite% : Editable-Sprite%
+  (class editor-snip% (super-new)
+    (define enabled : Boolean #true)
+    
+    (define/public (enable ?) (set! enabled ?))
+    (define/public (enabled?) enabled)
+    (define/public (get-tooltip dc x y editor-x editor-y mouse) #false)
+    (define/public (get-rectangle+extent) (values 0.0 0.0 0.0 0.0 0.0 0.0))
+
+    (define/public (on-elapse interval uptime) (void))
+    (define/public (on-elapsed interval uptime elapsed) (void))))
+
+#;(define permanent-sprite% : Sprite%
+  (class sprite% (super-new)
+    (define/override (copy)
+      (throw exn:fail:unsupported "copy this kind of snip is impossible!"))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+#;(define game-zone% : Game-Zone%
   (class pasteboard% (super-new)
     (send* this
       (set-selection-visible #false)
@@ -151,7 +190,7 @@
       (get-snip-location snip &x &y) ; TODO: why must call (get-extent)?
       (send snip get-extent (or (get-dc) the-dc) (unbox &x) (unbox &y) &width &height)
       (when dc-coordinate? (local-to-global &x &y))
-      (if (and #false #;(nefertimon-editor-snip%? snip) (not (is-selected? snip)))
+      (if (and (typeof? snip editable-sprite%) (not (is-selected? snip)))
           (match-let-values ([(_ _ _ _ ext-height ext-width) (send snip get-rectangle+extent)])
             (values (real->double-flonum (unbox &x))
                     (real->double-flonum (unbox &y))
@@ -196,14 +235,14 @@
         (if (false? next-snip) this-snip (try next-snip))))
 
     (define/public (do-interactive-operation snip operation event)
-      (and #;(nefertimon-snip%? snip)
+      (and (typeof? snip sprite%)
            (case operation
-             #;[(hover)    (send snip on-hover  #true  event)]
-             #;[(active)   (send snip on-active #true  event)]
-             #;[(deactive) (send snip on-active #false event)]
-             #;[(goodbye)  (send snip on-hover  #false event)]
-             #;[(select)   (send snip on-select #true  event)]
-             #;[(deselect) (send snip on-select #false event)]
+             [(hover)    (send snip on-hover  #true  event)]
+             [(active)   (send snip on-active #true  event)]
+             [(deactive) (send snip on-active #false event)]
+             [(goodbye)  (send snip on-hover  #false event)]
+             [(select)   (send snip on-select #true  event)]
+             [(deselect) (send snip on-select #false event)]
              [(insert)   (send snip on-insert this   event)]
              [(delete)   (send snip on-delete this   event)]
              [else #false])))
@@ -216,27 +255,27 @@
                             [(and uuid unique?) (error 'ordered-insert "snip has already existed: ~a" uuid)]
                             [else (insert/compare-with (send this-snip next))]))])))
 
-    #;(define/public (enable ?)
+    (define/public (enable ?)
       (let try-next : Void ([child : (Option (Instance Snip%)) (find-first-snip)])
         (unless (false? child)
-          (cond [else #;(nefertimon-snip%? child) (send child enable ?)]
-                #;[(nefertimon-editor-snip%? child) (send child enable ?)])
+          (cond [(typeof? child sprite%) (send child enable ?)]
+                [(typeof? child editable-sprite%) (send child enable ?)])
           (try-next (send child next)))))
 
-    #;(define/public (find-next-editor-snip snip)
-      (let try : (Option (Instance Nefertimon-Editor-Snip%))
+    (define/public (find-next-editable-sprite snip)
+      (let try : (Option (Instance Editable-Sprite%))
         ([this-snip (if (false? snip) (find-first-snip) (send snip next))])
-        (cond [(or (false? this-snip) (nefertimon-editor-snip%? this-snip)) this-snip]
+        (cond [(or (false? this-snip) (typeof? this-snip editable-sprite%)) this-snip]
               [else (try (send this-snip next))])))
 
-    #;(define/public (find-previous-editor-snip snip)
-      (let try : (Option (Instance Nefertimon-Editor-Snip%))
+    (define/public (find-previous-editable-sprite snip)
+      (let try : (Option (Instance Editable-Sprite%))
         ([this-snip (if (false? snip) (find-last-snip) (send snip previous))])
-        (cond [(or (false? this-snip) (nefertimon-editor-snip%? this-snip)) this-snip]
+        (cond [(or (false? this-snip) (typeof? this-snip editable-sprite%)) this-snip]
               [else (try (send this-snip previous))])))
 
-    #;(define/public (find-first-editor-snip) (find-next-editor-snip #false))
-    #;(define/public (find-last-editor-snip) (find-previous-editor-snip #false))
+    (define/public (find-first-editable-sprite) (find-next-editable-sprite #false))
+    (define/public (find-last-editable-sprite) (find-previous-editable-sprite #false))
 
     (define/override (find-snip editor-x editor-y [after #false])
       (let try : (Option (Instance Snip%)) ([maybe-snip (or after (find-first-snip))])
@@ -268,9 +307,9 @@
         (when (and hovered (not (eq? hovered maybe-snip)))
           (do-interactive-operation hovered 'goodbye mouse))
         (set-box! &hover maybe-snip)
-        #;(when (and maybe-snip (send mouse moving?) (not (send mouse get-left-down)))
+        (when (and maybe-snip (send mouse moving?) (not (send mouse get-left-down)))
           (do-interactive-operation maybe-snip 'hover mouse)))
-      #;(if (or (send mouse leaving?) (nor maybe-snip (is-a? maybe-snip game-snip%) #;(nefertimon-editor-snip%? maybe-snip)))
+      (if (or (send mouse leaving?) (nor (typeof? maybe-snip sprite%) (typeof? maybe-snip editable-sprite%)))
           (dtrace-info "kill all tooltips" #:topic 'tooltips #:urgent #false)
           (let*-values ([(_) (get-snip-location maybe-snip &editor-x &editor-y)]
                         [(dc-x dc-y) (editor-location-to-dc-location (unbox &editor-x) (unbox &editor-y))]
@@ -281,18 +320,18 @@
       (define maybe-snip : (Option (Instance Snip%))
         (let-values ([(editor-x editor-y) (dc-location-to-editor-location (send mouse get-x) (send mouse get-y))])
           (find-snip editor-x editor-y)))
-      ;;; TODO: why (button-up?) does not make editor-snip release its caret?
+      ;;; TODO: why (button-up?) does not make editable-snip release its caret?
       (when (send mouse button-down? 'left)
         (let deselect-snip : Void ([snip (find-next-selected-snip #false)])
           (unless (false? snip)
-            (when (and #false #;(nefertimon-editor-snip%? snip) (not (eq? maybe-snip snip)))
+            (when (and (typeof? snip editable-sprite%) (not (eq? maybe-snip snip)))
               (remove-selected snip))
             (deselect-snip (find-next-selected-snip snip)))))
-      (when (and maybe-snip #;(not (is-a? maybe-snip permanent-snip%)))
+      (when (and maybe-snip (not (is-a? maybe-snip permanent-sprite%)))
         (cond [(or (send mouse button-down? 'left)
                    (and (send mouse moving?)
                         (send mouse get-left-down)))
-               (cond #;[(nefertimon-editor-snip%? maybe-snip) (set-selected maybe-snip)]
+               (cond [(typeof? maybe-snip editable-sprite%) (set-selected maybe-snip)]
                      [else (void (do-interactive-operation maybe-snip 'active mouse))])]
               [(send mouse button-up? 'left)
                (set-selected maybe-snip)
@@ -301,12 +340,12 @@
     (define/override (on-char keyboard)
       (cond [(not (eq? (send keyboard get-key-code) #\tab)) (super on-char keyboard)]
             [else (let ([snip (find-next-selected-snip #false)])
-                    #;(define next-snip : (Option (Instance Nefertimon-Editor-Snip%))
+                    (define next-snip : (Option (Instance Editable-Sprite%))
                       (if (send keyboard get-shift-down)
-                          (if snip (find-previous-editor-snip snip) (find-last-editor-snip))
-                          (if snip (find-next-editor-snip snip) (find-first-editor-snip))))
-                    (cond [else #;(false? next-snip) (no-selected)]
-                          #;[else (set-selected next-snip)]))]))
+                          (if snip (find-previous-editable-sprite snip) (find-last-editable-sprite))
+                          (if snip (find-next-editable-sprite snip) (find-first-editable-sprite))))
+                    (cond [(false? next-snip) (no-selected)]
+                          [else (set-selected next-snip)]))]))
 
     (define/override (on-default-char keyboard)
       (unless (memq (send keyboard get-key-code)
@@ -319,12 +358,12 @@
     
     (define/augment (after-insert snip before x y)
       (inner (void) after-insert snip before x y)
-      #;(when (game-snip%? snip) (send snip on-insert this))
+      (when (typeof? snip sprite%) (send snip on-insert this))
       (end-edit-sequence))
 
     (define/augment (after-select snip on?)
       (inner (void) after-select snip on?)
-      #;(when (nefertimon-editor-snip%? snip)
+      (when (typeof? snip editable-sprite%)
         (set-caret-owner (and on? snip))
         (define digivice : (Option (Instance Editor<%>)) (send snip get-editor))
         (unless (or (false? digivice) (not on?))
@@ -335,7 +374,7 @@
       (inner (void) on-delete snip))
     
     (define/augment (after-delete snip)
-      #;(when (game-snip%? snip) (send snip on-delete this))
+      (when (typeof? snip sprite%) (send snip on-delete this))
       (inner (void) after-delete snip)
       (end-edit-sequence))
 
@@ -343,4 +382,82 @@
       (void))
 
     (define/public (on-elapsed interval uptime elapsed)
+      (void))))
+
+#;(define digivice-zone% : Digivice-Zone%
+  (class game-zone% (super-new)
+    (init-field alignment [gapsize 0] [on-interactive-operation void])
+
+    (inherit get-snip-rectangle move-to move find-last-snip)
+
+    (define/override (do-interactive-operation snip operation event)
+      (or (super do-interactive-operation snip operation event)
+          (and (on-interactive-operation this snip operation event)
+               #true)))
+
+    (define/augment (after-insert snip before x y)
+      (define (find-last-movable-snip [this-snip : (Option (Instance Snip%))]) : (Option (Instance Snip%))
+        (cond [(false? this-snip) #false]
+              [(is-a? this-snip permanent-sprite%) (find-last-movable-snip (send this-snip previous))]
+              [else this-snip]))
+      (unless (is-a? snip permanent-sprite%)
+        (case alignment
+          [(vertical)
+           (if (false? before)
+               (let ([last-one (find-last-movable-snip (send snip previous))])
+                 (cond [(false? last-one) (move-to snip 0 0)]
+                       [else (let-values ([(_x last-y _w last-height) (get-snip-rectangle last-one)])
+                               (move-to snip 0 (+ last-y last-height gapsize)))]))
+               (let-values ([(snip-x snip-y _w _h) (get-snip-rectangle before)])
+                 (move-to snip snip-x snip-y)
+                 (define-values (_x _y _w snip-height) (get-snip-rectangle snip))
+                 (let move-down : Void ([this-snip : (Option (Instance Snip%)) before])
+                   (unless (false? this-snip)
+                     (unless (is-a? this-snip permanent-sprite%)
+                       (move this-snip 0 (+ snip-height gapsize)))
+                     (move-down (send this-snip next))))))]
+          [(horizontal)
+           (if (false? before)
+               (let ([last-one (find-last-movable-snip (send snip previous))])
+                 (cond [(false? last-one) (move-to snip 0 0)]
+                       [else (let-values ([(last-x _y last-width _h) (get-snip-rectangle last-one)])
+                               (move-to snip (+ last-x last-width gapsize) 0))]))
+               (let-values ([(snip-x snip-y _w _h) (get-snip-rectangle before)])
+                 (move-to snip snip-x snip-y)
+                 (define-values (_x _y snip-width _h) (get-snip-rectangle snip))
+                 (let move-right : Void ([this-snip : (Option (Instance Snip%)) before])
+                   (unless (false? this-snip)
+                     (unless (is-a? this-snip permanent-sprite%)
+                       (move this-snip (+ snip-width gapsize) 0))
+                     (move-right (send this-snip next))))))]))
+      (inner (void) after-insert snip before x y))
+    
+    (define/augment (after-delete snip)
+      (define ?next : (Option (Instance Snip%)) (send snip next))
+      (unless (false? ?next)
+        (unless (is-a? snip permanent-sprite%)
+          (case alignment
+            [(vertical)
+             (define-values (_x _y _w snip-height) (get-snip-rectangle snip))
+             (let move-up : Void ([this-snip : (Option (Instance Snip%)) ?next])
+               (unless (false? this-snip)
+                 (unless (is-a? this-snip permanent-sprite%)
+                   (move this-snip 0 (- (+ snip-height gapsize))))
+                 (move-up (send this-snip next))))]
+            [(horizontal)
+             (define-values (_x _y snip-width _h) (get-snip-rectangle snip))
+             (let move-left : Void ([this-snip : (Option (Instance Snip%)) ?next])
+               (unless (false? this-snip)
+                 (unless (is-a? this-snip permanent-sprite%)
+                   (move this-snip (- (+ snip-width gapsize)) 0))
+                 (move-left (send this-snip next))))])))
+      (inner (void) after-delete snip))
+    
+    (define/augment (after-select snip on?)
+      (do-interactive-operation snip (if on? 'select 'deselect) (current-milliseconds))
+      (inner (void) after-select snip on?))))
+
+#;(define heads-up-zone% : Heads-up-Zone%
+  (class game-zone% (super-new)
+    (define/public (get-margin up right bottom left)
       (void))))
