@@ -17,6 +17,10 @@
          [required-minimum-size (case-> [-> (Values Nonnegative-Integer Nonnegative-Integer)]
                                         [Nonnegative-Integer Nonnegative-Integer -> Void])]
 
+         ;;; NOTE
+         ; Don't change `surface-ready?` to `ready?`,
+         ;   a sprite may also implements this interface,
+         ;   where one itself has the method `ready?`
          [surface-ready? (-> Boolean)]
          [shown? (-> Boolean)]
 

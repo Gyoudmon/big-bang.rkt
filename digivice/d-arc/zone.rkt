@@ -5,15 +5,19 @@
 (require racket/flonum)
 
 (require "sprite.rkt")
+(require "display.rkt")
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-(define-type IGraphletInfo<%>
+(define-type Game-Zone-Info<%>
+  (Class (init-field [master (Instance Display<%>)])))
+
+(define-type Graphlet-Info<%>
   (Class (init-field [master (Instance Game-Zone%)])))
 
 (define-type Graphlet%
   (Class #:implements Sprite%
          [master (-> Game-Zone%)]
-         [bind-info (-> (Instance IGraphletInfo<%>) Void)]
+         [bind-info (-> (Instance Graphlet-Info<%>) Void)]
          
          [colliding-with-mouse? (-> Flonum Flonum Boolean)]
          [own-caret (-> Boolean Void)]
@@ -28,7 +32,9 @@
          [notify-updated (-> Void)]))
 
 (define-type Game-Zone%
-  (Class [construct (-> Void)]
+  (Class (field [info (Option (Instance Game-Zone-Info<%>))])
+         
+         [construct (-> Void)]
          [get-extent (-> Flonum Flonum (Values Nonnegative-Flonum Nonnegative-Flonum))]
          [get-margin (-> Flonum Flonum (Values Flonum Flonum Flonum Flonum))]
          [resize (-> Nonnegative-Flonum Nonnegative-Flonum Void)]
@@ -64,12 +70,16 @@
                      [gapsize Nonnegative-Real #:optional]
                      [on-interactive-operation On-Interactive-Operation #:optional])))
 
-#;(define-type Heads-up-Zone%
+(define-type Heads-up-Zone%
   (Class #:implements Game-Zone%
-         [get-margin (-> (Boxof Nonnegative-Real) (Boxof Nonnegative-Real) (Boxof Nonnegative-Real) (Boxof Nonnegative-Real) Void)]))
+         [get-margin (-> (Values Nonnegative-Real Nonnegative-Real Nonnegative-Real Nonnegative-Real))]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (define the-dc (make-object bitmap-dc% #false))
+
+(define game-zone-info% : Game-Zone-Info<%>
+  (class object% (super-new)
+    (init-field master)))
 
 #;(define sprite% : Sprite%
   (class snip% (super-new)

@@ -4,10 +4,12 @@
 
 (require typed/racket/gui)
 
+(require racket/flonum)
+
 (require "display.rkt")
+(require "zone.rkt")
 
 (require digimon/digitama/system)
-
 (require plot/bitmap)
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -15,21 +17,50 @@
   (Class #:implements Display<%>
          (init [parent (U (Instance Frame%) (Instance Dialog%)
                           (Instance Panel%) (Instance Pane%))]
+               [construct-zones (-> (Listof (Instance Game-Zone%))) #:optional]
                [min-width (Option Nonnegative-Integer) #:optional]
                [min-height (Option Nonnegative-Integer) #:optional]
-               [transparent? Boolean #:optional])))
+               [heads-up-zone (Option (Instance Heads-up-Zone%)) #:optional]
+               [transparent? Boolean #:optional])
+         [current-zone (-> (Option (Instance Game-Zone%)))]
+         [current-zone-index (-> (Option Index))]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (define universe% : Universe%
   (class object% (super-new)
-    (init parent [min-width #false] [min-height #false] [transparent? #false])
+    (init parent
+          [construct-zones list]
+          [min-width #false] [min-height #false]
+          [heads-up-zone #false] [transparent? #false])
 
-    (define _universe% : (Class #:implements Canvas%)
+    (define hup-zone : (Option (Instance Heads-up-Zone%)) heads-up-zone)
+    (define hup-margins : FlVector (flvector 0.0 0.0 0.0 0.0))
+
+    (define zones : (Vectorof (Instance Game-Zone%))
+      (for/vector : (Vectorof (Instance Game-Zone%)) ([gz (in-list (construct-zones))])
+        (set-field! info gz (make-object game-zone-info% this))
+        gz))
+
+    (define recent-zone-idx : Index 0)
+
+    ;;; NOTE
+    ; Yes, it's weird here, but Racket class doesn't have the method-like constructor,
+    ; instead, the body of class itself is the constructor.
+    ; In this situation, the overridden canvas% is just used to register some event listeners,
+    ; sounds like a method-like constructor as in Java or .Net.
+    (define constructor% : (Class #:implements Canvas%)
       (class canvas%
         (super-new [parent parent] [style (if (not transparent?) null '(transparent))] [enabled #true] [label #false]
                    [min-width min-width] [min-height min-height] [stretchable-width #true] [stretchable-height #true]
                    [horiz-margin 0] [vert-margin 0] [gl-config #false]
                    [paint-callback void])
+
+        (unless (not hup-zone)
+          (let-values ([(t r b l) (send hup-zone get-margin)])
+            (flvector-set! hup-margins 0 (real->double-flonum t))
+            (flvector-set! hup-margins 1 (real->double-flonum r))
+            (flvector-set! hup-margins 2 (real->double-flonum b))
+            (flvector-set! hup-margins 3 (real->double-flonum l))))
 
         (define/override (on-paint) (do-paint))
         (define/override (on-subwindow-event who mouse) (do-pointer-event mouse))))
@@ -60,6 +91,14 @@
     (define/public (take-snapshot) (void))
     (define/public (save file.png) (void))
 
+    (define/public (current-zone-index)
+      (and (< recent-zone-idx (vector-length zones))
+           recent-zone-idx))
+
+    (define/public (current-zone)
+      (and (< recent-zone-idx (vector-length zones))
+           (vector-ref zones recent-zone-idx)))
+
     (define (do-paint) : Void
       (define-values (lx ty rx by) (pea-positions))
       (send device draw-bitmap pea lx ty)
@@ -85,14 +124,14 @@
                [dd (vector-ref samples 2)]
                [dg (+ DD Dd)]
                [mx (/ (+ glx grx) 2.0)])
-          (send device draw-text (format "DD: ~a" DD) (+ glx ch) (+ gby (* ch 1.2)))
-          (send device draw-text (format "Dd: ~a" Dd) (+ glx ch) (+ gby (* ch 2.4)))
-          (send device draw-text (format "显性: ~a" dg) (+ mx ch) (+ gby (* ch 1.8)))
-          (send device draw-text (format "dd: ~a" dd) (+ glx ch) (+ gby (* ch 3.8)))
-          (send device draw-text (format "隐性: ~a" dd) (+ mx ch) (+ gby (* ch 3.8)))
-          (send device draw-text (format "总次数: ~a" population) (+ glx ch) (+ gby (* ch 5.2)))
+          (send device draw-text (format "DD: ~a" DD) (+ glx ch) (+ gby (* ch 1.0)))
+          (send device draw-text (format "Dd: ~a" Dd) (+ glx ch) (+ gby (* ch 2.5)))
+          (send device draw-text (format "显性: ~a" dg) (+ mx ch) (+ gby (* ch 1.75)))
+          (send device draw-text (format "dd: ~a" dd) (+ glx ch) (+ gby (* ch 4.0)))
+          (send device draw-text (format "隐性: ~a" dd) (+ mx ch) (+ gby (* ch 4.0)))
+          (send device draw-text (format "总次数: ~a" population) (+ glx ch) (+ gby (* ch 6.5)))
           (when (> dd 0)
-            (send device draw-text (format "比例: ~a：1" (~r (/ dg dd) #:precision 1)) (+ mx ch) (+ gby (* ch 5.2))))))
+            (send device draw-text (format "比例: ~a：1" (~r (/ dg dd) #:precision 1)) (+ mx ch) (+ gby (* ch 6.5))))))
       
       (void))
 
@@ -124,7 +163,7 @@
       
       (values lx ty rx by))
     
-    (define physics : (Instance Canvas%) (new _universe%))
+    (define physics : (Instance Canvas%) (new constructor%))
     (define device : (Instance DC<%>) (send physics get-dc))
     (define stat-font : (Instance Font%) (send device get-font))
     (define gamete-font : (Instance Font%) (make-font #:size 48))
