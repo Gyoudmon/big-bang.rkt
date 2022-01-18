@@ -4,12 +4,18 @@
 
 (require racket/flonum)
 
+(require digimon/dtrace)
+(require digimon/class)
+
 (require "sprite.rkt")
 (require "display.rkt")
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (define-type Game-Zone-Info<%>
   (Class (init-field [master (Instance Display<%>)])))
+
+(define-type Game-Zone<%>
+  (Class (field [info (Option (Instance Game-Zone-Info<%>))])))
 
 (define-type Graphlet-Info<%>
   (Class (init-field [master (Instance Game-Zone%)])))
@@ -32,16 +38,22 @@
          [notify-updated (-> Void)]))
 
 (define-type Game-Zone%
-  (Class (field [info (Option (Instance Game-Zone-Info<%>))])
+  (Class #:implements Game-Zone<%>
          
          [construct (-> Void)]
          [get-extent (-> Flonum Flonum (Values Nonnegative-Flonum Nonnegative-Flonum))]
          [get-margin (-> Flonum Flonum (Values Flonum Flonum Flonum Flonum))]
          [resize (-> Nonnegative-Flonum Nonnegative-Flonum Void)]
-         [update (-> Nonnegative-Fixnum Nonnegative-Fixnum Nonnegative-Fixnum Void)]
+         [update (-> Nonnegative-Fixnum Nonnegative-Fixnum Void)]
          [draw (-> (Instance DC<%>) Flonum Flonum Nonnegative-Flonum Nonnegative-Flonum Void)]
          [draw-progress (-> (Instance DC<%>) Flonum Flonum Nonnegative-Flonum Nonnegative-Flonum Void)]
          [ready? (-> Boolean)]
+
+         [begin-update-sequence (-> Void)]
+         [end-update-sequence (-> Void)]
+         [in-update-sequence? (-> Boolean)]
+         [needs-update? (-> Boolean)]
+         [notify-graphlet-updated (-> (Instance Sprite%) Void)]
 
          [on-key (-> (U Char Symbol) Boolean)]
          [on-tap (-> Flonum Flonum Void)]
@@ -57,8 +69,8 @@
 
          [enable (-> Boolean Void)]
          [get-zone-view (-> (Values Flonum Flonum Nonnegative-Flonum Nonnegative-Flonum))]
-         [find-last-snip (-> (Option (Instance Snip%)))]
-         [get-snip-rectangle (-> (Instance Snip%) [#:global? Boolean] (Values Flonum Flonum Nonnegative-Flonum Nonnegative-Flonum))]
+         [find-last-graphlet (-> (Option (Instance Graphlet%)))]
+         [get-graphlet-rectangle (-> (Instance Graphlet%) [#:global? Boolean] (Values Flonum Flonum Nonnegative-Flonum Nonnegative-Flonum))]
          [get-zone-rectangle (-> [#:global? Boolean] (Values Flonum Flonum Nonnegative-Flonum Nonnegative-Flonum))]
          
          [on-elapse (-> Nonnegative-Fixnum Nonnegative-Fixnum Void)]
@@ -81,98 +93,54 @@
   (class object% (super-new)
     (init-field master)))
 
-#;(define sprite% : Sprite%
-  (class snip% (super-new)
-    (send* this
-      (set-snipclass (new snip-class%))
-      (set-flags (cons 'handles-all-mouse-events (send this get-flags))))
-    
-    (inherit get-admin get-extent)
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+(define editable-sprite% : Sprite%
+  (class sprite% (super-new)))
 
-    (define enabled : Boolean #true)
-    
-    (define/public (enable ?) (set! enabled ?))
-    (define/public (enabled?) enabled)
-    (define/public (on-insert zone) (void))
-    (define/public (on-delete zone) (void))
-    (define/public (on-select ? event) #false)
-    (define/public (on-hover ? event) #false)
-    (define/public (on-active ? event) #false)
-    (define/public (get-tooltip dc x y editor-x editor-y mouse) #false)
+(define permanent-sprite% : Sprite%
+  (class sprite% (super-new)))
 
-    (define/public (on-elapse interval uptime) (void))
-    (define/public (on-elapsed interval uptime elapsed) (void))
-
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+(define game-zone% : Game-Zone%
+  (class object% (super-new)
+    (field [info #false])
     
-    (define/public (selected?)
-      (define master : (Option (Instance Snip-Admin%)) (get-admin))
-      (and master
-           (let ([zone (send master get-editor)])
-             (and (typeof? zone pasteboard%)
-                  (send zone is-selected? this)))))
+    (define/public (construct) (void))
+    (define/public (get-extent x y) (values 0.0 0.0))
+    (define/public (get-margin x y) (values 0.0 0.0 0.0 0.0))
+    (define/public (resize width height) (void))
+    (define/public (update interval uptime) (void))
+    (define/public (draw dc x y Width Height) (void))
+    (define/public (draw-progress dc x y Width Height) (void))
+    (define/public (ready?) #true)
 
-    (define/public (refresh-now)
-      (define master : (Option (Instance Snip-Admin%)) (get-admin))
-      (define editor : (Option (Instance Editor<%>)) (and master (send master get-editor)))
-      (unless (false? editor)
-        (define-values (w h) (get-size))
-        (send editor needs-update this 0 0 w h)))
-    
-    (define/public (get-zone-size) ; insets have already been subtracted
-      (define master : (Option (Instance Snip-Admin%)) (get-admin))
-      (cond [(false? master) (values 0.0 0.0)]
-            [else (let ([&width : (Boxof Nonnegative-Real) (box 0.0)]
-                        [&height : (Boxof Nonnegative-Real) (box 0.0)])
-                    (send master get-view-size &width &height)
-                    (values (real->double-flonum (unbox &width))
-                            (real->double-flonum (unbox &height))))]))
+    (define/public (begin-update-sequence) (void))
+    (define/public (end-update-sequence) (void))
+    (define/public (in-update-sequence?) #false)
+    (define/public (needs-update?) #false)
+    (define/public (notify-graphlet-updated sprite) (void))
 
-    (define/public (get-size)
-      ;;; NOTE
-      ; racket/snip has its own caching strategy,
-      ; getting size through editor is therefore better than directly invoking (get-extent)  
-      (define master : (Option (Instance Snip-Admin%)) (get-admin))
-      (define editor : (Option (Instance Editor<%>)) (and master (send master get-editor)))
-      (if (false? editor)
-          (let ([&width : (Boxof Nonnegative-Real) (box 0.0)]
-                [&height : (Boxof Nonnegative-Real) (box 0.0)])
-            (get-extent the-dc 0.0 0.0 &width &height)
-            (values (real->double-flonum (unbox &width))
-                    (real->double-flonum (unbox &height))))
-          (let ([dc : (Instance DC<%>) (or (and master (send master get-dc)) the-dc)]
-                [&x : (Boxof Real) (box 0.0)]
-                [&y : (Boxof Real) (box 0.0)])
-            ;;; WARNING: Client may have to call (resized) first
-            (send editor get-snip-location this &x &y #false)
-            (define-values (x y) (values (unbox &x) (unbox &y)))
-            (send editor get-snip-location this &x &y #true)
-            (values (flabs (real->double-flonum (- (unbox &x) x)))
-                    (flabs (real->double-flonum (- (unbox &y) y)))))))
-    
-    (define/override (copy)
-      (throw exn:fail:unsupported "this feature is disabled!"))
-    
-    (define/override (write /dev/edtout)
-      (throw exn:fail:unsupported "this feature has not been implemented yet!"))))
+    (define/public (on-key keycode) #false)
+    (define/public (on-tap x y) (void))
+    (define/public (on-leave x y) (void))
+    (define/public (on-wheel-translation local_x local_y delta horizontal?) #false)
+    (define/public (on-wheel-zoom local_x local_y delta) #false)
 
-#;(define editable-sprite% : Editable-Sprite%
-  (class editor-snip% (super-new)
-    (define enabled : Boolean #true)
-    
-    (define/public (enable ?) (set! enabled ?))
-    (define/public (enabled?) enabled)
-    (define/public (get-tooltip dc x y editor-x editor-y mouse) #false)
-    (define/public (get-rectangle+extent) (values 0.0 0.0 0.0 0.0 0.0 0.0))
+    (define/public (on-char keycode keyboard) #false)
+    (define/public (on-mouse-move x y mouse) #false)
+    (define/public (on-mouse-drag x y which mouse) #false)
+    (define/public (on-mouse-press x y which mouse) #false)
+    (define/public (on-mouse-release x y which mouse) #false)
 
+    (define/public (enable ?) (void))
+    (define/public (get-zone-view) (values 0.0 0.0 0.0 0.0))
+    (define/public (find-last-graphlet) #false)
+    (define/public (get-graphlet-rectangle g #:global? [global? #false]) (values 0.0 0.0 0.0 0.0))
+    (define/public (get-zone-rectangle #:global? [global? #false]) (values 0.0 0.0 0.0 0.0))
+         
     (define/public (on-elapse interval uptime) (void))
     (define/public (on-elapsed interval uptime elapsed) (void))))
 
-#;(define permanent-sprite% : Sprite%
-  (class sprite% (super-new)
-    (define/override (copy)
-      (throw exn:fail:unsupported "copy this kind of snip is impossible!"))))
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 #;(define game-zone% : Game-Zone%
   (class pasteboard% (super-new)
     (send* this

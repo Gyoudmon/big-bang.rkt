@@ -26,6 +26,15 @@
          [current-zone-index (-> (Option Index))]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+(struct zone-margin
+  ([top : Nonnegative-Flonum]
+   [right : Nonnegative-Flonum]
+   [bottom : Nonnegative-Flonum]
+   [left : Nonnegative-Flonum])
+  #:type-name Zone-Margin
+  #:mutable #:transparent)
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (define universe% : Universe%
   (class object% (super-new)
     (init parent
@@ -33,12 +42,12 @@
           [min-width #false] [min-height #false]
           [heads-up-zone #false] [transparent? #false])
 
-    (define hup-zone : (Option (Instance Heads-up-Zone%)) heads-up-zone)
-    (define hup-margins : FlVector (flvector 0.0 0.0 0.0 0.0))
+    (define hup-margin : Zone-Margin (zone-margin 0.0 0.0 0.0 0.0))
+    (define hup-zone : (Option (Instance Heads-up-Zone%)) heads-up-zone) 
 
     (define zones : (Vectorof (Instance Game-Zone%))
       (for/vector : (Vectorof (Instance Game-Zone%)) ([gz (in-list (construct-zones))])
-        (set-field! info gz (make-object game-zone-info% this))
+        (bind-zone-ownership this gz)
         gz))
 
     (define recent-zone-idx : Index 0)
@@ -48,22 +57,29 @@
     ; instead, the body of class itself is the constructor.
     ; In this situation, the overridden canvas% is just used to register some event listeners,
     ; sounds like a method-like constructor as in Java or .Net.
-    (define constructor% : (Class #:implements Canvas%)
-      (class canvas%
+    (define constructor% : (Class #:implements Canvas% (init [master (Instance Universe%)]))
+      (class canvas% (init master)
         (super-new [parent parent] [style (if (not transparent?) null '(transparent))] [enabled #true] [label #false]
                    [min-width min-width] [min-height min-height] [stretchable-width #true] [stretchable-height #true]
                    [horiz-margin 0] [vert-margin 0] [gl-config #false]
                    [paint-callback void])
 
-        (unless (not hup-zone)
-          (let-values ([(t r b l) (send hup-zone get-margin)])
-            (flvector-set! hup-margins 0 (real->double-flonum t))
-            (flvector-set! hup-margins 1 (real->double-flonum r))
-            (flvector-set! hup-margins 2 (real->double-flonum b))
-            (flvector-set! hup-margins 3 (real->double-flonum l))))
+        (define firstrun? : Boolean #true)
 
+        (unless (not hup-zone)
+          (bind-zone-ownership master hup-zone)
+          (let-values ([(t r b l) (send hup-zone get-margin)])
+            (set-zone-margin-top!    hup-margin (real->double-flonum t))
+            (set-zone-margin-right!  hup-margin (real->double-flonum r))
+            (set-zone-margin-bottom! hup-margin (real->double-flonum b))
+            (set-zone-margin-left!   hup-margin (real->double-flonum l))))
+        
         (define/override (on-paint) (do-paint))
-        (define/override (on-subwindow-event who mouse) (do-pointer-event mouse))))
+        (define/override (on-subwindow-event who mouse) (do-pointer-event mouse))
+
+        (define/override (on-superwindow-show shown?)
+          (unless (not shown?)
+            (cond [(and firstrun?) (do-construct 'first-run) (set! firstrun? #false)])))))
 
     (define/public (get-canvas) physics)
     (define/public (get-device) device)
@@ -98,6 +114,10 @@
     (define/public (current-zone)
       (and (< recent-zone-idx (vector-length zones))
            (vector-ref zones recent-zone-idx)))
+
+    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+    (define (do-construct [reason : Symbol]) : Void
+      (void))
 
     (define (do-paint) : Void
       (define-values (lx ty rx by) (pea-positions))
@@ -143,6 +163,7 @@
                   (reproduce 1)
                   #true))))
 
+    ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
     (define (pea-positions) : (Values Real Real Real Real)
       (define-values (#{Width : Natural} #{Height : Natural}) (client-size))
       (define-values (width height) (values (send pea get-width) (send pea get-height)))
@@ -163,7 +184,7 @@
       
       (values lx ty rx by))
     
-    (define physics : (Instance Canvas%) (new constructor%))
+    (define physics : (Instance Canvas%) (new constructor% [master this]))
     (define device : (Instance DC<%>) (send physics get-dc))
     (define stat-font : (Instance Font%) (send device get-font))
     (define gamete-font : (Instance Font%) (make-font #:size 48))
@@ -196,3 +217,8 @@
                             #:width (max 1 (quotient (plot-width) 2))
                             #:height (send pea get-height)
                             (list (discrete-histogram statistics)))))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+(define bind-zone-ownership : (-> (Instance Display<%>) (Instance Game-Zone<%>) Void)
+  (lambda [master gzone]
+    (set-field! info gzone (make-object game-zone-info% master))))
