@@ -1,10 +1,9 @@
-#lang typed/racket/gui
+#lang typed/racket/base
 
 (provide (all-defined-out))
 
-(require racket/flonum)
+(require typed/racket/gui/base)
 
-(require digimon/dtrace)
 (require digimon/class)
 
 (require "sprite.rkt")
@@ -40,10 +39,13 @@
 (define-type Game-Zone%
   (Class #:implements Game-Zone<%>
          
-         [construct (-> Void)]
+         [construct (-> Symbol Nonnegative-Flonum Nonnegative-Flonum Void)]
+         [load (-> Symbol Nonnegative-Flonum Nonnegative-Flonum Void)]
+         [reflow (-> Nonnegative-Flonum Nonnegative-Flonum Void)]
+         [notify-surface-ready (-> Void)]
+
          [get-extent (-> Flonum Flonum (Values Nonnegative-Flonum Nonnegative-Flonum))]
          [get-margin (-> Flonum Flonum (Values Flonum Flonum Flonum Flonum))]
-         [resize (-> Nonnegative-Flonum Nonnegative-Flonum Void)]
          [update (-> Nonnegative-Fixnum Nonnegative-Fixnum Void)]
          [draw (-> (Instance DC<%>) Flonum Flonum Nonnegative-Flonum Nonnegative-Flonum Void)]
          [draw-progress (-> (Instance DC<%>) Flonum Flonum Nonnegative-Flonum Nonnegative-Flonum Void)]
@@ -105,10 +107,13 @@
   (class object% (super-new)
     (field [info #false])
     
-    (define/public (construct) (void))
+    (define/public (construct reason Width Height) (void))
+    (define/public (load reason Width Height) (void))
+    (define/public (reflow width height) (void))
+    (define/public (notify-surface-ready) (void))
+    
     (define/public (get-extent x y) (values 0.0 0.0))
     (define/public (get-margin x y) (values 0.0 0.0 0.0 0.0))
-    (define/public (resize width height) (void))
     (define/public (update interval uptime) (void))
     (define/public (draw dc x y Width Height) (void))
     (define/public (draw-progress dc x y Width Height) (void))

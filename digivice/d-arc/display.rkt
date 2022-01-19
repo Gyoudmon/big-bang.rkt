@@ -2,7 +2,7 @@
 
 (provide (all-defined-out))
 
-(require typed/racket/gui)
+(require typed/racket/gui/base)
 
 (require "forward/zone.rkt")
 
@@ -11,11 +11,12 @@
   (Class [get-device (-> (Instance DC<%>))]
          [get-canvas (-> (Instance Canvas<%>))]
 
-         [actual-size (-> (Values Nonnegative-Integer Nonnegative-Integer))]
-         [client-size (-> (Values Nonnegative-Integer Nonnegative-Integer))]
-         [graphical-minimum-size (-> (Values Nonnegative-Integer Nonnegative-Integer))]
-         [required-minimum-size (case-> [-> (Values Nonnegative-Integer Nonnegative-Integer)]
-                                        [Nonnegative-Integer Nonnegative-Integer -> Void])]
+         [actual-size (-> (Values Natural Natural))]
+         [client-size (-> (Values Natural Natural))]
+         [zone-actual-size (-> (Instance Game-Zone<%>) (Values Natural Natural))]
+         [graphical-minimum-size (-> (Values Natural Natural))]
+         [required-minimum-size (case-> [-> (Values Natural Natural)]
+                                        [Natural Natural -> Void])]
 
          ;;; NOTE
          ; Don't change `surface-ready?` to `ready?`,
@@ -30,7 +31,6 @@
 
          [global->local (->* ((Instance Game-Zone<%>) Flonum Flonum) (Flonum Flonum) (Values Flonum Flonum))]
          [local->global (->* ((Instance Game-Zone<%>) Flonum Flonum) (Flonum Flonum) (Values Flonum Flonum))]
-         [zone-actual-size (-> (Instance Game-Zone<%>) (Values Nonnegative-Flonum Nonnegative-Flonum))]
          [refresh (-> (Instance Game-Zone<%>) Void)]
 
          [take-snapshot (-> Any)]
