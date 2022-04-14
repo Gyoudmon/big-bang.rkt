@@ -11,12 +11,12 @@
   (Class [get-device (-> (Instance DC<%>))]
          [get-canvas (-> (Instance Canvas<%>))]
 
-         [actual-size (-> (Values Natural Natural))]
-         [client-size (-> (Values Natural Natural))]
-         [zone-actual-size (-> (Instance Game-Zone<%>) (Values Natural Natural))]
-         [graphical-minimum-size (-> (Values Natural Natural))]
-         [required-minimum-size (case-> [-> (Values Natural Natural)]
-                                        [Natural Natural -> Void])]
+         [actual-size (-> (Values Nonnegative-Flonum Nonnegative-Flonum))]
+         [client-size (-> (Values Nonnegative-Flonum Nonnegative-Flonum))]
+         [zone-actual-size (-> (Instance Game-Zone<%>) (Values Nonnegative-Flonum Nonnegative-Flonum))]
+         [graphical-minimum-size (-> (Values Nonnegative-Flonum Nonnegative-Flonum))]
+         [required-minimum-size (case-> [-> (Values Nonnegative-Flonum Nonnegative-Flonum)]
+                                        [Nonnegative-Real Nonnegative-Real -> Void])]
 
          ;;; NOTE
          ; Don't change `surface-ready?` to `ready?`,

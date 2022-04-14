@@ -6,6 +6,8 @@
 
 (require digimon/class)
 
+(require "forward/zone.rkt")
+
 (require "sprite.rkt")
 (require "display.rkt")
 
@@ -13,8 +15,9 @@
 (define-type Game-Zone-Info<%>
   (Class (init-field [master (Instance Display<%>)])))
 
-(define-type Game-Zone<%>
-  (Class (field [info (Option (Instance Game-Zone-Info<%>))])))
+(define-type Attachable-Game-Zone<%>
+  (Class #:implements Game-Zone<%>
+         (field [info (Option (Instance Game-Zone-Info<%>))])))
 
 (define-type Graphlet-Info<%>
   (Class (init-field [master (Instance Game-Zone%)])))
@@ -37,7 +40,7 @@
          [notify-updated (-> Void)]))
 
 (define-type Game-Zone%
-  (Class #:implements Game-Zone<%>
+  (Class #:implements Attachable-Game-Zone<%>
          
          [construct (-> Symbol Nonnegative-Flonum Nonnegative-Flonum Void)]
          [load (-> Symbol Nonnegative-Flonum Nonnegative-Flonum Void)]
@@ -86,7 +89,7 @@
 
 (define-type Heads-up-Zone%
   (Class #:implements Game-Zone%
-         [get-margin (-> (Values Nonnegative-Real Nonnegative-Real Nonnegative-Real Nonnegative-Real))]))
+         [margin-values (-> (Values Nonnegative-Flonum Nonnegative-Flonum Nonnegative-Flonum Nonnegative-Flonum))]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (define the-dc (make-object bitmap-dc% #false))
@@ -440,7 +443,7 @@
       (do-interactive-operation snip (if on? 'select 'deselect) (current-milliseconds))
       (inner (void) after-select snip on?))))
 
-#;(define heads-up-zone% : Heads-up-Zone%
+(define heads-up-zone% : Heads-up-Zone%
   (class game-zone% (super-new)
-    (define/public (get-margin up right bottom left)
-      (void))))
+    (define/public (margin-values)
+      (values 0.0 0.0 0.0 0.0))))
